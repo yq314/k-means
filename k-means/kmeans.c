@@ -14,7 +14,7 @@
 void help(){
 	printf("Usage: \n");
 	printf("<-i inputFileName>	:	input data file path and name\n");
-	printf("<-k k-means>		:	the number of k, should be larger than 0, default 9\n");
+	printf("[-k k-means]		:	the number of k, should be larger than 0, default 9\n");
 	printf("[-h]			:	print this help\n");
 }
 
