@@ -233,7 +233,7 @@ void writeToFile(int *labels, int size, struct point *centroids, int k){
 
 	fclose(pWrite);
 
-	printf("Successfully wrote %d centroids into file: %s\n", k, outLabelFileName);
+	printf("Successfully wrote %d centroids into file: %s\n", k, outCntrdFileName);
 }
 
 /*
