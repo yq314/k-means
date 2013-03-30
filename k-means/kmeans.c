@@ -67,15 +67,15 @@ void getCmdOptions(int argc, char **argv, char **inputFileName, int *k){
  *
  * This function will change the value of count
  *
- * @param fileName	char*			the file path and name to be read
- * @param count		int*			number of file lines
+ * @param fileName	char*	the file path and name to be read
+ * @param count		int*	number of file lines
  *
- * @return data		struct point*	array storing the points
+ * @return data		Point*	array storing the points
  *
  */
-struct point *readData(char *fileName, int *count){
+Point *readData(char *fileName, int *count){
 	FILE *pRead;
-	struct point *data = (struct point *) malloc(sizeof(struct point));
+	Point *data = (Point *) malloc(sizeof(Point));
 	float nX, nY;
 
 	if((pRead = fopen(fileName, "r")) == NULL){
@@ -85,7 +85,7 @@ struct point *readData(char *fileName, int *count){
 
 	*count = 0;
 	while(fscanf(pRead, "%f %f\n", &nX, &nY) != EOF){
-		data = (struct point *) realloc(data, (*count+1) * sizeof(struct point));
+		data = (Point *) realloc(data, (*count+1) * sizeof(Point));
 		data[*count].x = nX;
 		data[*count].y = nY;
 		++ *count;
@@ -100,23 +100,23 @@ struct point *readData(char *fileName, int *count){
  *
  * This function will change the value of centroids
  *
- * @param data		struct point*		the input data array
- * @param size		int					the size of input data
- * @param k			int					k-means
- * @param centroids	struct point*		array storing the k centroids
+ * @param data		Point*		the input data array
+ * @param size		int			the size of input data
+ * @param k			int			k-means
+ * @param centroids	Point*		array storing the k centroids
  *
  * @return labels	int*	an array storing the label of each point
  *
  */
-int *kmeans(struct point *data, int size, int k, struct point *centroids){
+int *kmeans(Point *data, int size, int k, Point *centroids){
 	int *labels = (int *) calloc(size, sizeof(int));
 	int i, j, done, loops;
-	float min_dist, dist;
+	float minDist, dist;
 	float tempX, tempY;
 	if(!centroids){
-		centroids = (struct point *) calloc(k, sizeof(struct point));
+		centroids = (Point *) calloc(k, sizeof(Point));
 	}
-	struct point *tempC = (struct point *) calloc(k, sizeof(struct point)); /*temporary centroids*/
+	Point *tempC = (Point *) calloc(k, sizeof(Point)); /*temporary centroids*/
 	int *counts = (int *) calloc(k, sizeof(int));	/*counts of each cluster*/
 
 	/* initialization: randomly set k centroids */
@@ -145,14 +145,14 @@ int *kmeans(struct point *data, int size, int k, struct point *centroids){
 		}
 
 		for(i = 0; i < size; i++){
-			min_dist = FLT_MAX;
+			minDist = FLT_MAX;
 			/* compute the distance between the point and each centroid*/
 			for(j = 0; j < k; j++){
 				/* no need to compute the sqrt, we just need the value for comparison */
 				dist = pow(data[i].x - centroids[j].x, 2) +
 						pow(data[i].y - centroids[j].y, 2);
-				if(dist < min_dist){
-					min_dist = dist;
+				if(dist < minDist){
+					minDist = dist;
 					labels[i] = j;
 				}
 			}
@@ -196,12 +196,12 @@ int *kmeans(struct point *data, int size, int k, struct point *centroids){
  *
  * @param labels	int*	The array storing cluster labels for each point
  * @param size		int		The size of data
- * @param centroids	struct point*	The array storing k centroids
+ * @param centroids	Point*	The array storing k centroids
  * @param k			int		k-means
  *
  * @return void
  */
-void writeToFile(int *labels, int size, struct point *centroids, int k){
+void writeToFile(int *labels, int size, Point *centroids, int k){
 	char *outLabelFileName = "labels.txt";
 	char *outCntrdFileName = "centroids.txt";
 	FILE *pWrite;
@@ -243,8 +243,8 @@ int main(int argc, char **argv){
 
 	char *inputFileName;
 	int size;	/* line count of input data*/
-	struct point *data;	/* input data points*/
-	struct point *centroids;
+	Point *data;	/* input data points*/
+	Point *centroids;
 	int *labels;
 	int k = 0;
 	time_t start, end;
@@ -254,7 +254,7 @@ int main(int argc, char **argv){
 
 	data = readData(inputFileName, &size);
 
-	centroids = (struct point *) calloc(k, sizeof(struct point));
+	centroids = (Point *) calloc(k, sizeof(Point));
 	labels = kmeans(data, size, k, centroids);
 
 	writeToFile(labels, size, centroids, k);
@@ -273,4 +273,5 @@ int main(int argc, char **argv){
 	end = clock();
 	printf("%d points assigned to %d clusters in %.2f s.\n", size, k, (double)(end - start)/CLOCKS_PER_SEC);
 
+	return 0;
 }

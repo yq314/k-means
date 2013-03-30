@@ -17,19 +17,19 @@
 #include <math.h>
 #include <time.h>
 
-struct point{
+typedef struct{
 	float x;
 	float y;
-};
+} Point;
 
 void help();
 
 void getCmdOptions(int argc, char **argv, char **input_file_name, int *k);
 
-struct point *readData(char *fileName, int *count);
+Point *readData(char *fileName, int *count);
 
-int *kmeans(struct point *data, int n, int k, struct point *centroids);
+int *kmeans(Point *data, int n, int k, Point *centroids);
 
-void writeToFile(int *labels, int n, struct point *centroids, int k);
+void writeToFile(int *labels, int n, Point *centroids, int k);
 
 #endif /* KMEANS_H_ */
