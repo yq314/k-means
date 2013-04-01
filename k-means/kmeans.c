@@ -56,7 +56,7 @@ void getCmdOptions(int argc, char **argv, char **inputFileName, int *k){
 		*k = 9;
 	}
 
-	if(strlen(*inputFileName) == 0){
+	if(*inputFileName == NULL || strlen(*inputFileName) == 0){
 		help();
 		exit(0);
 	}
@@ -134,7 +134,7 @@ int *kmeans(Point *data, int size, int k, Point *centroids){
 	}
 
 	/* loop to determine the clusters */
-	done = 1;
+	done = TRUE;
 	loops = 0;
 	do{
 		/* initialize the helper arrays */
@@ -168,12 +168,12 @@ int *kmeans(Point *data, int size, int k, Point *centroids){
 		}
 
 		/* update the centroids */
-		done = 1;
+		done = TRUE;
 		for(i = 0; i < k; i++){
 			tempX = tempC[i].x/counts[i];
 			tempY = tempC[i].y/counts[i];
 			if(centroids[i].x != tempX || centroids[i].y != tempY){
-				done = 0; /* quit the loop until no change */
+				done = FALSE; /* quit the loop until no change */
 				centroids[i].x = tempX;
 				centroids[i].y = tempY;
 			}
