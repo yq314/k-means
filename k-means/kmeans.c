@@ -15,6 +15,8 @@ void help(){
 	printf("Usage: \n");
 	printf("<-i inputFileName>	:	input data file path and name\n");
 	printf("[-k k-means]		:	the number of k, should be larger than 0, default 9\n");
+	printf("[-r]			:	whether create centroids randomly\n");
+	printf("[-c centroidFileName]	:	the starting centroids file\n");
 	printf("[-h]			:	print this help\n");
 }
 
@@ -27,14 +29,16 @@ void help(){
  * @param argv			char**	list of arguments
  * @param inputFileName	char**	input file path and name
  * @param k				int*	k-means
+ * @param r				int*	whether create centroids randomly
+ * @param centFileName		char**	the starting centroids file
  *
  * @return void
  */
-void getCmdOptions(int argc, char **argv, char **inputFileName, int *k){
+void getCmdOptions(int argc, char **argv, char **inputFileName, int *k, int *r, char **centFileName){
 	int c;
 	opterr = 0;
 
-	while((c = getopt(argc, argv, "i:k:h")) != -1){
+	while((c = getopt(argc, argv, "i:k:c:hr")) != -1){
 		switch(c){
 			case 'i':
 				*inputFileName = (char *)malloc(strlen(optarg) * sizeof(optarg));
@@ -42,6 +46,13 @@ void getCmdOptions(int argc, char **argv, char **inputFileName, int *k){
 				break;
 			case 'k':
 				*k = atoi(optarg);
+				break;
+			case 'r':
+				*r = TRUE;
+				break;
+			case 'c':
+				*centFileName = (char *)malloc(strlen(optarg) * sizeof(optarg));
+				strcpy(*centFileName, optarg);
 				break;
 			case 'h':
 				help();
@@ -96,6 +107,35 @@ Point *readData(char *fileName, int *count){
 }
 
 /*
+ * Reads the centroids from input file
+ *
+ * This function will change the value of count
+ *
+ * @param fileName	char*	the file path and name to be read
+ * @param count		int	number of file lines
+ *
+ * @return data		Point*	array storing the points
+ *
+ */
+Point *readCentroids(char *fileName, int count){
+	FILE *pRead;
+	Point *data = (Point *) calloc(count, sizeof(Point));
+	int i;
+
+	if((pRead = fopen(fileName, "r")) == NULL){
+		printf("Fail to open file: %s", fileName);
+		exit(-1);
+	}
+
+	for(i = 0; i < count; i++){
+		fscanf(pRead, "%f %f\n", &data[i].x, &data[i].y);
+	}
+	fclose(pRead);
+
+	return data;
+}
+
+/*
  * k-means algorithm inplementation
  *
  * This function will change the value of centroids
@@ -113,25 +153,14 @@ int *kmeans(Point *data, int size, int k, Point *centroids){
 	int i, j, done, loops;
 	float minDist, dist;
 	float tempX, tempY;
-	if(!centroids){
-		centroids = (Point *) calloc(k, sizeof(Point));
-	}
 	Point *tempC = (Point *) calloc(k, sizeof(Point)); /*temporary centroids*/
 	int *counts = (int *) calloc(k, sizeof(int));	/*counts of each cluster*/
 
-	/* initialization: randomly set k centroids */
-	if(k > size){
-		k = size;
+	printf("=====initial centroids=====\n");
+	for(i = 0; i < k; i++){
+		printf("%f %f\n", centroids[i].x, centroids[i].y);
 	}
-	for(i = j = 0; i < k; i++){
-		/*
-		 * pick the first point from k chunks,
-		 * it's not real random, but acceptable
-		 */
-		j += size/k;
-		centroids[i].x = data[j].x;
-		centroids[i].y = data[j].y;
-	}
+	printf("===========================\n");
 
 	/* loop to determine the clusters */
 	done = TRUE;
@@ -170,8 +199,8 @@ int *kmeans(Point *data, int size, int k, Point *centroids){
 		/* update the centroids */
 		done = TRUE;
 		for(i = 0; i < k; i++){
-			tempX = tempC[i].x/counts[i];
-			tempY = tempC[i].y/counts[i];
+			tempX = counts[i] ? tempC[i].x / counts[i] : 0;
+			tempY = counts[i] ? tempC[i].y / counts[i] : 0;
 			if(centroids[i].x != tempX || centroids[i].y != tempY){
 				done = FALSE; /* quit the loop until no change */
 				centroids[i].x = tempX;
@@ -189,6 +218,60 @@ int *kmeans(Point *data, int size, int k, Point *centroids){
 	free(counts);
 
 	return labels;
+}
+
+/*
+ * Initialize the centroids, randomly select initial points
+ *
+ * @param data	Point*	array of input points
+ * @param size	int		number of points
+ * @param k		int		number of clusters
+ * @param r		int		whether create randomly
+ *
+ * @return Point* array of centroids
+ *
+ */
+Point *initialCentroids(Point *data, int size, int k, int r){
+	Point *c = (Point *) calloc(k, sizeof(Point));
+	int i,j;
+	char *fileName = "initial.txt";
+	FILE *pWrite;
+
+	if(k > size){
+		k = size;
+	}
+
+	srand((unsigned) time(NULL));
+	for(i = j = 0; i < k; i++){
+		if(r){
+			c[i].x = (float) (rand() % 1000) / 1000 * 8;
+			c[i].y = (float) (rand() % 1000) / 1000 * 8;
+ 		}else{
+ 			/*
+			 * pick the first point from k chunks,
+			 * it's not real random, but acceptable
+			 */
+			j += size/k;
+			c[i].x = data[j].x;
+			c[i].y = data[j].y;
+ 		}
+	}
+
+	/* write to file */
+	if((pWrite = fopen(fileName, "w")) == NULL){
+		printf("Fail to open output file: %s\n", fileName);
+		exit(-1);
+	}
+
+	for(i = 0; i < k; i++){
+		fprintf(pWrite, "%f %f\n", c[i].x, c[i].y);
+	}
+
+	printf("Successfully wrote initial centroids into file: %s\n", fileName);
+
+	fclose(pWrite);
+
+	return c;
 }
 
 /*
@@ -241,26 +324,34 @@ void writeToFile(int *labels, int size, Point *centroids, int k){
  */
 int main(int argc, char **argv){
 
-	char *inputFileName;
+	char *inputFileName = NULL;
+	char *centFileName = NULL;
 	int size;	/* line count of input data*/
 	Point *data;	/* input data points*/
 	Point *centroids;
 	int *labels;
 	int k = 0;
+	int r = FALSE;
 	time_t start, end;
 	start = clock();
 
-	getCmdOptions(argc, argv, &inputFileName, &k);
+	getCmdOptions(argc, argv, &inputFileName, &k, &r, &centFileName);
 
 	data = readData(inputFileName, &size);
 
-	centroids = (Point *) calloc(k, sizeof(Point));
+	if(centFileName != NULL){
+		centroids = readCentroids(centFileName, k);
+	}else{
+		centroids = initialCentroids(data, size, k, r);
+	}
+
 	labels = kmeans(data, size, k, centroids);
 
 	writeToFile(labels, size, centroids, k);
 
 	/*  Clean up */
 	free(inputFileName);
+	free(centFileName);
 
 	if(data){
 		free(data);

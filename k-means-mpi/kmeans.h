@@ -10,7 +10,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <malloc/malloc.h>
+#include <malloc.h>
 #include <string.h>
 #include <unistd.h>
 #include <float.h>
@@ -22,6 +22,8 @@ typedef struct{
 	float y;
 } Point;
 
+#define TRUE 1
+#define FALSE 0
 #define ROOT 0
 #define BLOCK_LOW(id, p, n) ((id)*(n)/(p))
 #define BLOCK_HIGH(id, p, n) (BLOCK_LOW((id)+1, p, n) - 1)
@@ -29,13 +31,16 @@ typedef struct{
 
 void help();
 
-void getCmdOptions(int argc, char **argv, char **input_file_name, int *k);
+void getCmdOptions(int argc, char **argv, char **inputFileName, int *k, int *r, char ** centFileName);
 
 Point *readData(char *fileName, int *count);
 
-int *kmeans(Point *data, int n, int k, Point *centroids);
+Point *readCentroids(char *fileName, int count);
 
+Point *initialCentroids(Point *data, int size, int k, int r);
 
 void writeToFile(int *labels, int n, Point *centroids, int k);
+
+void sumPoint(void *in, void *inout, int *len, MPI_Datatype *dptr);
 
 #endif /* KMEANS_H_ */

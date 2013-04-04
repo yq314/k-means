@@ -14,6 +14,8 @@ void help(){
 	printf("Usage: \n");
 	printf("<-i inputFileName>	:	input data file path and name\n");
 	printf("[-k k-means]		:	the number of k, should be larger than 0, default 9\n");
+	printf("[-r]			:	whether create centroids randomly\n");
+	printf("[-c centroidFileName]	:	the starting centroids file\n");
 	printf("[-h]			:	print this help\n");
 }
 
@@ -26,14 +28,16 @@ void help(){
  * @param argv			char**	list of arguments
  * @param inputFileName	char**	input file path and name
  * @param k				int*	k-means
+ * @param r				int*	whether create centroids randomly
+ * @param centFileName		char**	the starting centroids file
  *
  * @return void
  */
-void getCmdOptions(int argc, char **argv, char **inputFileName, int *k){
+void getCmdOptions(int argc, char **argv, char **inputFileName, int *k, int *r, char **centFileName){
 	int c;
 	opterr = 0;
 
-	while((c = getopt(argc, argv, "i:k:h")) != -1){
+	while((c = getopt(argc, argv, "i:k:c:hr")) != -1){
 		switch(c){
 			case 'i':
 				*inputFileName = (char *)malloc(strlen(optarg) * sizeof(optarg));
@@ -42,8 +46,16 @@ void getCmdOptions(int argc, char **argv, char **inputFileName, int *k){
 			case 'k':
 				*k = atoi(optarg);
 				break;
+			case 'r':
+				*r = TRUE;
+				break;
+			case 'c':
+				*centFileName = (char *)malloc(strlen(optarg) * sizeof(optarg));
+				strcpy(*centFileName, optarg);
+				break;
 			case 'h':
 				help();
+				MPI_Finalize();
 				exit(0);
 				break;
 			default:
@@ -57,6 +69,7 @@ void getCmdOptions(int argc, char **argv, char **inputFileName, int *k){
 
 	if(*inputFileName == NULL || strlen(*inputFileName) == 0){
 		help();
+		MPI_Finalize();
 		exit(0);
 	}
 }
@@ -88,6 +101,35 @@ Point *readData(char *fileName, int *count){
 		data[*count].x = nX;
 		data[*count].y = nY;
 		++ *count;
+	}
+	fclose(pRead);
+
+	return data;
+}
+
+/*
+ * Reads the centroids from input file
+ *
+ * This function will change the value of count
+ *
+ * @param fileName	char*	the file path and name to be read
+ * @param count		int	number of file lines
+ *
+ * @return data		Point*	array storing the points
+ *
+ */
+Point *readCentroids(char *fileName, int count){
+	FILE *pRead;
+	Point *data = (Point *) calloc(count, sizeof(Point));
+	int i;
+
+	if((pRead = fopen(fileName, "r")) == NULL){
+		printf("Fail to open file: %s", fileName);
+		exit(-1);
+	}
+
+	for(i = 0; i < count; i++){
+		fscanf(pRead, "%f %f\n", &data[i].x, &data[i].y);
 	}
 	fclose(pRead);
 
@@ -145,27 +187,51 @@ void writeToFile(int *labels, int size, Point *centroids, int k){
  * @param data	Point*	array of input points
  * @param size	int		number of points
  * @param k		int		number of clusters
+ * @param r		int		whether create randomly
  *
  * @return Point* array of centroids
  *
  */
-Point *initialCentroids(Point *data, int size, int k){
+Point *initialCentroids(Point *data, int size, int k, int r){
 	Point *c = (Point *) calloc(k, sizeof(Point));
 	int i,j;
+	char *fileName = "initial.txt";
+	FILE *pWrite;
 
 	if(k > size){
 		k = size;
 	}
 
+	srand((unsigned) time(NULL));
 	for(i = j = 0; i < k; i++){
-		/*
-		 * pick the first point from k chunks,
-		 * it's not real random, but acceptable
-		 */
-		j += size/k;
-		c[i].x = data[j].x;
-		c[i].y = data[j].y;
+		if(r){
+			c[i].x = (float) (rand() % 1000) / 1000 * 8;
+			c[i].y = (float) (rand() % 1000) / 1000 * 8;
+ 		}else{
+ 			/*
+			 * pick the first point from k chunks,
+			 * it's not real random, but acceptable
+			 */
+			j += size/k;
+			c[i].x = data[j].x;
+			c[i].y = data[j].y;
+ 		}
 	}
+
+	/* write to file */
+	if((pWrite = fopen(fileName, "w")) == NULL){
+		printf("Fail to open output file: %s\n", fileName);
+		exit(-1);
+	}
+
+	for(i = 0; i < k; i++){
+		fprintf(pWrite, "%f %f\n", c[i].x, c[i].y);
+	}
+
+	printf("Successfully wrote initial centroids into file: %s\n", fileName);
+
+	fclose(pWrite);
+
 	return c;
 }
 
@@ -193,7 +259,9 @@ void sumPoint(void *in, void *inout, int *len, MPI_Datatype *dptr){
  */
 int main(int argc, char **argv){
 
-	char *inputFileName;
+	char *inputFileName = NULL;
+	char *centFileName = NULL;
+	int r = FALSE;
 	int size;	/* line count of input data */
 	Point *data;	/* input data points */
 	Point *centroids; /* centroids */
@@ -231,9 +299,19 @@ int main(int argc, char **argv){
 
 	if(id == ROOT){
 		k = 0;
-		getCmdOptions(argc, argv, &inputFileName, &k);
+		getCmdOptions(argc, argv, &inputFileName, &k, &r, &centFileName);
 		data = readData(inputFileName, &size);
-		centroids = initialCentroids(data, size, k);
+		if(centFileName != NULL){
+			centroids = readCentroids(centFileName, k);
+		}else{
+			centroids = initialCentroids(data, size, k, r);
+		}
+
+		printf("=====initial centroids=====\n");
+		for(i = 0; i < k; i++){
+			printf("%f %f\n", centroids[i].x, centroids[i].y);
+		}
+		printf("===========================\n");
 
 		/* sending data to slave processors */
 		for(i = 1; i < p; i++){
@@ -304,8 +382,8 @@ int main(int argc, char **argv){
 			/* compute and broadcast the new centroid */
 			done = TRUE;
 			for(i = 0; i < k; i++){
-				tempX = globalC[i].x / globalCounts[i];
-				tempY = globalC[i].y / globalCounts[i];
+				tempX = globalCounts[i] ? globalC[i].x / globalCounts[i] : 0;
+				tempY = globalCounts[i] ? globalC[i].y / globalCounts[i] : 0;
 				if(centroids[i].x != tempX || centroids[i].y != tempY){
 					done = FALSE; /* quit the loop until no change */
 					centroids[i].x = tempX;
@@ -324,12 +402,14 @@ int main(int argc, char **argv){
 
 	if(id == ROOT){
 		labels = partialLabels;
+		labels = (int *) realloc(partialLabels, size * sizeof(int));
 		/* gather labels in root process */
 		for(i = 1; i < p; i++){
 			MPI_Recv(labels + BLOCK_LOW(i, p, size), chunkSize, MPI_INT, i, 0, MPI_COMM_WORLD, &status);
 			printf("Recieved %d labels from %d.\n", chunkSize, i);
 		}
 
+		printf("Iterated %d times.\n", loops);
 		writeToFile(labels, size, centroids, k);
 	} else {
 		printf("Process %d sending %d labels to root.\n", id, chunkSize);
