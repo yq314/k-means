@@ -155,7 +155,7 @@ Point *readCentroids(char *fileName, int count){
  */
 int *kmeans(Point *data, int size, int k, Point *centroids, int p){
 	int *labels = (int *) calloc(size, sizeof(int));
-	int i, j, done, loops;
+	int i, j, done, loops, check;
 	float minDist, dist;
 	float tempX, tempY;
 	Point *tempC = (Point *) calloc(k, sizeof(Point)); /*temporary centroids*/
@@ -170,73 +170,76 @@ int *kmeans(Point *data, int size, int k, Point *centroids, int p){
 	/* loop to determine the clusters */
 	done = TRUE;
 	loops = 0;
+	check = 0;
 
 	do{
 
-#pragma omp parallel default(shared) num_threads(p)
-	        {
-#pragma omp for schedule(static, 1)
-		  /* initialize the helper arrays */
-		  for(i = 0; i < k; i++){
-		    counts[i] = 0;
-		    tempC[i].x = 0;
-		    tempC[i].y = 0;
-		  }
+#pragma omp parallel for num_threads(p)
+	    /* initialize the helper arrays */
+	    for(i = 0; i < k; i++){
+	      counts[i] = 0;
+	      tempC[i].x = 0;
+	      tempC[i].y = 0;
+	    }
 
-#pragma omp for private(j, dist, minDist) schedule(static, 1) 
-		  for(i = 0; i < size; i++){
+#pragma omp parallel for private(j, dist, minDist) num_threads(p)
+	    for(i = 0; i < size; i++){
+	      minDist = FLT_MAX;
+	      /* compute the distance between the point and each centroid*/
+	      for(j = 0; j < k; j++){
+		/* no need to compute the sqrt, we just need the value for comparison */
+		dist = pow(data[i].x - centroids[j].x, 2) +
+		  pow(data[i].y - centroids[j].y, 2);
 
-		    minDist = FLT_MAX;
-
-		    /* compute the distance between the point and each centroid*/
-		    for(j = 0; j < k; j++){
-
-		      /* no need to compute the sqrt, we just need the value for comparison */
-		      dist = pow(data[i].x - centroids[j].x, 2) +
-			pow(data[i].y - centroids[j].y, 2);
-
-		      /* assign shortest distance to the j-th cluster*/
-		      if(dist < minDist){
-			minDist = dist;
-			labels[i] = j;
-		      }
-
-		    }
-
-		  }
-
+		/* assign shortest distance to the j-th cluster*/
+		if(dist < minDist){
+		  minDist = dist;
+		  labels[i] = j;
 		}
-		
-		/* unable to reduce arrays here */
-		/* possible to create local-arrays in thread and merge but performance improvement unlikely */
-		for (i = 0; i < size; i++) {
-		  /* count the number of points in the j-th cluster */
-		  ++counts[labels[i]];
-		  /*printf("Total counts in cluster %d: %d\n", labels[i], counts[labels[i]]);*/
+	      }
+	    }
+	  
 
-		  /*
-		   * simply add on the x and y of each point,
-		   * for further computation of new centroid
-		   */
-		  tempC[labels[i]].x += data[i].x;
-		  tempC[labels[i]].y += data[i].y;
-		
-		}
+	    /* unable to reduce arrays here */
+	    /* possible to create local-arrays in thread and merge but performance improvement unlikely */
+	    for (i = 0; i < size; i++) {
+	      /* count the number of points in the j-th cluster */
+	      ++counts[labels[i]];
+	      /*printf("Total counts in cluster %d: %d\n", labels[i], counts[labels[i]]);*/
 
+	      /*
+	       * simply add on the x and y of each point,
+	       * for further computation of new centroid
+	       */
+	      tempC[labels[i]].x += data[i].x;
+	      tempC[labels[i]].y += data[i].y;
 		
-		/* update the centroids */
-		done = TRUE;
-		for(i = 0; i < k; i++){
-			tempX = counts[i] ? tempC[i].x / counts[i] : 0;
-			tempY = counts[i] ? tempC[i].y / counts[i] : 0;
-			if(centroids[i].x != tempX || centroids[i].y != tempY){
-				done = FALSE; /* quit the loop until no change */
-				centroids[i].x = tempX;
-				centroids[i].y = tempY;
-			}
-		}
+	    }
+		
+	    /* update the centroids */
+#pragma omp parallel for private(tempX, tempY) reduction(+:check) num_threads(p)
+	    for(i = 0; i < k; i++){
+	      /* calculate new centroids of the new cluster */
+	      tempX = counts[i] ? tempC[i].x / counts[i] : 0;
+	      tempY = counts[i] ? tempC[i].y / counts[i] : 0;
+	      if(centroids[i].x != tempX || centroids[i].y != tempY){
+		check += 1; /* quit the loop until no change */
+		centroids[i].x = tempX;
+		centroids[i].y = tempY;
+	      }
+	    }
 
-		++loops;
+	    if (check >= 1) {
+	      done = FALSE; /* if any new centroid doesn't equal old centroid, check > 1, and done will equate to 0 to continue the loop */
+	    } else {
+	      done = TRUE;
+	    }
+
+	    ++loops;
+	  
+	    /* re-initialize check variable */
+	    check = 0;
+	  
 	}while(!done);
 
 	printf("Iterated %d loops.\n", loops);
